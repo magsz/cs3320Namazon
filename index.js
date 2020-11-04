@@ -1,142 +1,198 @@
 const express = require('express');
+const axios = require('axios');
+const mongoose = require('mongoose');
+const session = require('express-session');
+const MongoStore = require('connect-mongo')(session);
 
 const app = express();
-
 app.use(express.json());
+const router = express.Router();
 
-let users = [];
-let userNextId = 0;
-let cartNextId = 0;
-let itemId = 0;
-let quantity = 1;
+const userModel = require('./models/Users');
+const storeModel = require('./models/Store');
 
-let store = [];
-let storeNextId = 0;
+const port = 8080;
 
-const userData = {
-    id:userNextId,
-    "firstName":"Mario",
-    "lastName":"Gomez",
-    "email":"email@email.com",
-    carts:[]
-};
+//mongodb+srv://dbUser:<password>@cluster0.hp4lz.mongodb.net/<dbname>?retryWrites=true&w=majority
+const url = 'mongodb+srv://dbUser:dbPassword@cluster0.hp4lz.mongodb.net/namazon?retryWrites=true&w=majority'
 
-const userData2 = {
-    id:userNextId++,
-    "firstname":"bob",
-    "lastName":"lopez",
-    "email":"email2@email.com",
-    carts:[]
-};
 
-const userData3 = {
-    id:userNextId++,
-    "firstName":"Jason",
-    "lastName":"Diaz",
-    "email":"jdiaz@email.com",
-    carts:[]
-};
 
-const cartItem = {
-    id:cartNextId++,
-    "cartItemId":itemId++,
-    "item":"Coffee Cup",
-    quantity:quantity
-};
+let database;
 
-const storeItem = {
-    id:storeNextId++,
-    "item":"Coffee Cup",
-    quantity:quantity
-};
+const config = {
+    headers: {
+        'X-Api-Key': '21a4eb73d3e946489014c280a9e583dc'
+    }
+}
 
-users.push(userData);
-userData.carts.push(cartItem);
-users.push(userData2);
-userData2.carts.push(cartItem);
-store.push(storeItem);
+const initDataBase = async () => {
+    const database = await mongoose.connect(url,{useNewUrlParser: true, useUnifiedTopology: true});
 
-// Gets all the users
-app.get('/users', (req,res) => {
-    res.send(users);
-})
+    if (database){
+        app.use(session({
+            secret: 'IamASecret',
+            store: new MongoStore({mongooseConnection: mongoose.connection})
+        }));
+        app.use(router);
+        console.log("Successfully connected to my DB");
+    } else {
+        console.log("Error connecting to my DB");
+    }
+}
 
-// Gets the user by their user ID
-app.get('/users/userId/:id', (req,res)=>{
-    const foundUser = users.find((user)=>{
-        return user.id == req.params.id
-    })
-    res.send(foundUser || 404);
-})
+const initUsers = async () => {
+    const Users = [];
+    // Users.push({firstName:'Bob', lastName:'wajhdkla',email:'dfnakshf',cart:[]});
+    // userModel.create(Users);
+    //
+    //Using axios to randomly initialize random first, last name, and email to populate the DB
+    const firstNamesPromise = await axios.get('https://randommer.io/api/Name?nameType=firstname&quantity=10', config);
+    const lastNamesPromise = await  axios.get('https://randommer.io/api/Name?nameType=surname&quantity=10',config);
+    const emailPromise = await axios.get('https://randommer.io/api/Text/LoremIpsum?loremType=normal&type=words&number=10',config);
+
+    // loops and populates the DB
+    const result = await Promise.all([firstNamesPromise,lastNamesPromise,emailPromise]);
+    result[0].data.forEach((name,index) => {
+       Users.push({firstName: name, lastName: result[1].data[index],email: result[2].data[index], carts:[]});
+    });
+
+    await userModel.create(Users);
+}
+// manually hardcoded store items into the DB
+const initStoreItems = async () => {
+    const Items = [];
+    Items.push({storeItem:'StarWars Mug',quantity:1});
+    Items.push({storeItem:'Corsair Keyboard',quantity:7});
+    Items.push({storeItem:'Mouse Pad',quantity:3});
+    Items.push({storeItem:'Acer Monitor',quantity:54});
+    Items.push({storeItem:'Hello World Mat',quantity:10});
+    Items.push({storeItem:'Prisma Color pencils',quantity:56});
+    Items.push({storeItem:'Black Spray Paint',quantity:7});
+    Items.push({storeItem:'MacBook',quantity:99});
+    Items.push({storeItem:'Dog Collar',quantity:13});
+    Items.push({storeItem:'Topochico',quantity:24});
+    Items.push({storeItem:'Beats headphones',quantity:69});
+
+
+    storeModel.create(Items);
+    // Tried using axios to fill the Store items in the DB but did not work, will retry later.
+    // const cartItemName = await axios.get('https://randommer.io/api/Text/LoremIpsum?loremType=normal&type=words&number=50', config);
+    //
+    // for (let i = 0; i < cartItem.length; i++) {
+    //     const assignedCart = Items[Math.floor(Math.random() * cartItem.length)];
+    //     const newCart = {
+    //         cartItem: cartItem[i]
+    //     };
+    //     const createdCart = await cartModel.create(newCart);
+    //     assignedCart.carts.push(
+    //         {
+    //             cart: createdCart,
+    //             quantity: Math.random()
+    //         });
+    //     await assignedCart.save();
+    //
+    // }
+}
+const populateDB = async () => {
+    await initDataBase();
+    await userModel.deleteMany({});
+    await storeModel.deleteMany({});
+    await initUsers();
+    await initStoreItems();
+}
+populateDB();
+
+router.get('/users', async (req,res) => {
+    const foundUser = await userModel.find();
+    res.send(foundUser ? foundUser : 404 );
+});
+
+router.get('/users/userId/:id', async (req,res)=>{
+    const foundUser = await userModel.findById({_id: req.params.id});
+    res.send(foundUser ? foundUser : 404);
+});
 
 // Creates a new user
-app.post('/users', (req,res) => {
-  let newUser = req.body;
-  newUser.id = userNextId++;
-  newUser.firstName = req.param("Peter");
-  newUser.lastName = req.param("Griffen");
-  users.push(newUser);
-  res.send(newUser);
+router.post('/users', async (req,res) => {
+    const newUser = await userModel.create(req.body);
+    res.send(newUser ? newUser : 500);
 });
 
 // Gets the cart of a specific user by their id
-app.get('/users/userId/:id/cart', (req,res)=>{
-    let foundCart = userData.carts.find(cart=>
-        cart.id === (parseInt(req.params.id)));
-    let foundCartIndex = userData.carts.indexOf(foundCart);
+router.get('/users/userId/:id/cart', async (req,res)=>{
+    const foundUser = await userModel.findById({_id: req.params.id});
 
-    res.send(foundCart || 404);
+    res.send(foundUser.carts ? foundUser.carts : 404);
 });
 
 // Deletes a cart the users entire cart by their id
-app.delete('/users/userId/:id/cart', (req,res)=>{
-    let foundCart = userData.carts.find(cart=>
-    cart.id === (parseInt(req.params.id)));
-    let foundCartIndex = userData.carts.indexOf(foundCart);
-    // Deletes the cart by the index
-    users.splice(foundCartIndex,1);
-    //returns the cart that was deleted
-    res.send(foundCart || 404);
+router.delete('/users/userId/:id/cart', async (req,res)=>{
+    const foundUser = await userModel.findById({_id: req.params.id});
+    foundUser.carts = [];
+    res.send(foundUser.carts ? foundUser.carts : 404);
 });
 
 // Adds a new item to the users cart by the users cart id
-app.post('/cart/cartId/:id/cartItem', (req,res)=>{
-    let newCartItem = req.body;
-    newCartItem.id = itemId++;
-    newCartItem.item = req.param("Star Wars Coffee mug");
-    newCartItem.quantity = quantity++;
-    userData.carts.push(newCartItem);
+router.post('/cart/cartId/:id/cartItem', async (req,res)=>{
+    const foundUser = await userModel.findById({_id: req.params.id});
+    const newItem = await storeModel.create(req.body);
 
-   res.send(newCartItem || 404);
+    foundUser.carts.push(newItem);
+    await foundUser.save();
+
+    res.send(foundUser ? foundUser : 404);
 });
 
 // Deletes an item from a cart by the users cart id
-app.delete('/cart/cartId/:id/cartItem/:cartItemId', (req,res) =>{
-  let foundCart = userData.carts.find(cartItem =>
-  cartItem.id === parseInt(req.params.cartItemId));
+router.delete('/cart/cartId/:id/cartItem/:cartItemId', async (req,res) =>{
+    const foundUser = await userModel.findById({_id: req.params.id});
+    const foundItem = await storeModel.findById({_id: req.params.cartItemId});
 
-  if(!foundCart) res.status(404).send("The cart Item was not found");
-  let foundCartItemIndex = userData.carts.indexOf(foundCart);
+    foundUser.carts.splice(foundItem, 1);
+    await foundUser.save();
 
-  users.splice(foundCartItemIndex);
-
-  res.send(foundCart);
+    res.send(foundItem ? foundItem : 404);
 });
 
 // Gets the store item details
-app.get('/storeItem/:id', (req,res) =>{
-   const foundStore = store.find(store => {
-       return store.id == req.params.id;
-   })
+router.get('/storeItem/:id', async (req,res) =>{
+    const foundStore  = await storeModel.findById({_id:req.params.id});
+    if (!req.session.sessArray)
+    {
+        req.session.sessArray = [foundStore];
+    }else{
+        req.session.sessArray.push(foundStore);
+    }
 
-    res.send(foundStore || 404);
+    res.send(foundStore ? foundStore : 404);
 });
 
 // Gets all items that satisfy a  regular expression query
-app.get('/storeItem', (req,res)=>{
-    res.send(store.filter((item)=>{
-        return item.item === req.query.item;
-    }));
+router.get('/storeItem', async (req,res)=>{
+    const foundStoreItem = await storeModel.find(
+        {
+            cartItem: new RegExp(req.query.cartItem),
+            quantity: new RegExp(req.query.quantity)
+        }
+    )
+
+    res.send(foundStoreItem ? foundStoreItem : 404);
 });
 
-app.listen('8080');
+router.get('/storeItemRecent', async(req,res) => {
+    const lastViewed = [];
+    let num = req.query.num;
+
+    for (let i = 0; i < num; i++)
+    {
+        lastViewed.push(req.session.sessArray.pop());
+    }
+
+    res.send(lastViewed ? lastViewed : 404);
+});
+
+
+app.listen(port);
+console.log(`listening on port ${port}`);
+
