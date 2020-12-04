@@ -1,0 +1,57 @@
+.Login {
+    text-align: center;
+}
+.Welcome{
+    text-align: center;
+    margin-top:0px;
+}
+.LoginInput{
+    align-items: center;
+    background: #282c34;
+    margin:fill;
+    border-radius: 25px;
+    align-items: center;
+}
+.LoginBox{
+    align-items: center;
+    border: 1px solid #7575a3;
+    margin: fill;
+}
+.PasswordBox{
+    border: 1px solid #7575a3;
+    margin: 5px;
+}
+.LoginButton{
+    border: 1px solid #7575a3;
+    margin-top: 5px;
+    position: absolute;
+}
+
+.storeContainer{
+    margin-top: 100px;
+}
+.storeScrollList{
+    height:300px;
+    overflow-y: auto;
+    clear:both;
+    margin:auto;
+    width:50%;
+    padding:10px;
+}
+.storeList{
+    list-style-type: none;
+    text-align: left;
+}
+.scrollCartList{
+    height:400px;
+    overflow-y: auto;
+    clear:both;
+    margin-left: 300px;
+    width:50%;
+    padding:10px;
+}
+.cartList{
+    list-style-type: none;
+    text-align: left;
+}
+
